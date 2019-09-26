@@ -1,4 +1,4 @@
-# did-resolver-java-client
+# identity-hub-client-java
 
 ## Get it
 ### Maven
