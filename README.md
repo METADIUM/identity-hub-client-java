@@ -19,7 +19,7 @@ Add dependency
 <dependency>
     <groupId>com.github.METADIUM</groupId>
     <artifactId>identity-hub-client-java</artifactId>
-    <version>0.1</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 ### Gradle
@@ -36,14 +36,15 @@ Add dependency
 
 ```gradle
 dependencies {
-    implementation 'com.github.METADIUM:identity-hub-client-java:0.1'
+    implementation 'com.github.METADIUM:identity-hub-client-java:0.1.1'
 }
 ```
 
 
 ## Use it
 
-### Register DID
+### Register DID in Metadium
+
 
 
 ### Initialize hub client
