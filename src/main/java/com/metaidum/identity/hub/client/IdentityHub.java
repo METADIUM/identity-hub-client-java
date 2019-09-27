@@ -75,11 +75,11 @@ import okhttp3.Response;
  */
 public class IdentityHub {
 	// hub end point
-	private static final String MAINNET_HUB_URL = "https://testnetdatahub.metadium.com/";
+	private static final String MAINNET_HUB_URL = "https://datahub.metadium.com/";
 	private static final String TESTNET_HUB_URL = "https://testnetdatahub.metadium.com/";
 	
 	// default hub did
-	private static final String MAINNET_HUB_DID_DEFAULT = "did:meta:testnet:0000000000000000000000000000000000000000000000000000000000000004";
+	private static final String MAINNET_HUB_DID_DEFAULT = "did:meta:testnet:0000000000000000000000000000000000000000000000000000000000000527";
 	private static final String TESTNET_HUB_DID_DEFAULT = "did:meta:testnet:0000000000000000000000000000000000000000000000000000000000000004";
 	
 	/** Debug log */
@@ -98,7 +98,7 @@ public class IdentityHub {
 	}
 	
 	/** OkHttpClient */
-	private OkHttpClient okHttpClient;
+	private static OkHttpClient okHttpClient;
 	
 	/** is test net */
 	private boolean bTestNet;
@@ -115,6 +115,12 @@ public class IdentityHub {
     /** signer of client */
     private JWSSigner clientSigner;
     
+    private static synchronized OkHttpClient httpClient() {
+        OkHttpClient.Builder httpClient = new OkHttpClient.Builder();
+        return httpClient.build();
+        
+    }
+    
     /**
      * Create IdentityHub client
      * @param isTestnet whether connect test net
@@ -123,9 +129,9 @@ public class IdentityHub {
      * @param signer of client
      */
     public IdentityHub(boolean isTestnet, String did, String keyId, JWSSigner signer) {
-        OkHttpClient.Builder httpClient = new OkHttpClient.Builder();
-        okHttpClient = httpClient.build();
-        
+        if (okHttpClient == null) {
+        	okHttpClient = httpClient();
+        }
         hubDid = isTestnet ? TESTNET_HUB_DID_DEFAULT : MAINNET_HUB_DID_DEFAULT;
         bTestNet = isTestnet;
         clientDid = did;
@@ -173,6 +179,7 @@ public class IdentityHub {
 				.post(RequestBody.create(null, requestBody))
 				.build();
 		
+		long time = System.currentTimeMillis();
 		if (bDebug) {
 			logger.log(Level.INFO, "Hub-Request\nBody "+requestBody+"\nPayload "+jws.getPayload().toString());
 		}
@@ -192,13 +199,13 @@ public class IdentityHub {
     		}
     		
 			if (bDebug) {
-				logger.log(Level.INFO, "Hub-Response\nBody "+serializedJws+"\nPayload "+jwsObject.getPayload().toString());
+				logger.log(Level.INFO, "Hub-Response ("+(System.currentTimeMillis()-time)+"ms)\nBody "+serializedJws+"\nPayload "+jwsObject.getPayload().toString());
 			}
     		
     		// Get document of did 
     		String resKid = jwsObject.getHeader().getKeyID();
     		String resDid = resKid.split("#")[0];
-    		DidDocument didDocument = DIDResolverAPI.getDocument(resDid);
+    		DidDocument didDocument = DIDResolverAPI.getInstance().getDocument(resDid);
     		if (didDocument == null) {
     			// error
     			throw new HubCommunicationException("Not register hub DID. "+resDid);
@@ -324,8 +331,8 @@ public class IdentityHub {
      * @param types           type of object
      * @param privateKey      to decrypt contents
      * @return commit JWS object (not exists signature) to decrypted. header is commit header, payload is signed verifiable, if not found, return null
-     * @throws JOSEException
-     * @throws IOException
+     * @throws HubCommunicationException
+     * @throws IOException network error
      * @throws CommitObjectException 
      */
     public CommitObject getVerifiableObject(String subjectOwnerDid, List<String> types, BCECPrivateKey privateKey) throws HubCommunicationException, IOException, CommitObjectException {
@@ -364,7 +371,7 @@ public class IdentityHub {
 		}
 		
 		String resKid = commitObject.getHeader().getKeyID();
-		DidDocument didDocument = DIDResolverAPI.getDocument(resKid.split("#")[0]);
+		DidDocument didDocument = DIDResolverAPI.getInstance().getDocument(resKid.split("#")[0]);
 		PublicKey publicKey = didDocument.getPublicKey(resKid);
 		String hexPublicKey = publicKey.getPublicKeyHex();
 		ECDSAVerifier verifier;
@@ -391,7 +398,7 @@ public class IdentityHub {
 		if (bDebug) {
 			logger.log(Level.INFO, "Hub-Response EncryptVerifiable\nHeader "+encryptedJWT.getHeader().toString());
 		}
-		didDocument = DIDResolverAPI.getDocument(encryptedJWT.getHeader().getKeyID().split("#")[0]);
+		didDocument = DIDResolverAPI.getInstance().getDocument(encryptedJWT.getHeader().getKeyID().split("#")[0]);
 		publicKey = didDocument.getPublicKey(encryptedJWT.getHeader().getKeyID());
 		try {
 			if (!encryptedJWT.verify(new ECDSAVerifier(ECKeyUtils.toECPublicKey(Numeric.hexStringToByteArray(publicKey.getPublicKeyHex()), "secp256k1")))) {
@@ -463,7 +470,7 @@ public class IdentityHub {
 		}
 		
 		// Verify verifiable
-		didDocument = DIDResolverAPI.getDocument(verifierKeyId.split("#")[0]);
+		didDocument = DIDResolverAPI.getInstance().getDocument(verifierKeyId.split("#")[0]);
 		publicKey = didDocument.getPublicKey(verifierKeyId);
 		hexPublicKey = publicKey.getPublicKeyHex();
 		try {
@@ -498,7 +505,7 @@ public class IdentityHub {
     	List<PublicKey> granteePublicKeys = new ArrayList<>();
     	if (granteeDids != null) {
 	    	for (String granteeDid : granteeDids) {
-	    		DidDocument didDocument = DIDResolverAPI.getDocument(granteeDid);
+	    		DidDocument didDocument = DIDResolverAPI.getInstance().getDocument(granteeDid);
 	    		if (didDocument == null) {
 	    			throw new NullPointerException("did not found");
 	    		}
