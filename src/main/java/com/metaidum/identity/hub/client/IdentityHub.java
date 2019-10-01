@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import java.security.interfaces.ECPublicKey;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,12 +25,10 @@ import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.web3j.utils.Numeric;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.metadium.vc.Verifiable;
-import com.metadium.vc.util.ECKeyUtils;
 import com.metaidum.did.resolver.client.DIDResolverAPI;
 import com.metaidum.did.resolver.client.document.DidDocument;
 import com.metaidum.did.resolver.client.document.PublicKey;
@@ -216,11 +215,15 @@ public class IdentityHub {
     		if (publicKeyObj == null) {
     			throw new HubCommunicationException("Not exists key id in did document "+resKid);
     		}
+    		
+    		ECPublicKey ecPublicKey = (ECPublicKey)publicKeyObj.getPublicKey();
+    		if (ecPublicKey == null) {
+    			throw new HubCommunicationException("Not exists or invalid public key hex in did document "+resKid);
+    		}
     		String hexPublicKey = publicKeyObj.getPublicKeyHex();
     		if (hexPublicKey == null) {
-    			throw new HubCommunicationException("Not exists public key hex in did document "+resKid);
+    			
     		}
-    		BCECPublicKey ecPublicKey = ECKeyUtils.toECPublicKey(Numeric.hexStringToByteArray(hexPublicKey), "secp256k1");
     		
     		// verify response
     		try {
@@ -373,12 +376,11 @@ public class IdentityHub {
 		String resKid = commitObject.getHeader().getKeyID();
 		DidDocument didDocument = DIDResolverAPI.getInstance().getDocument(resKid.split("#")[0]);
 		PublicKey publicKey = didDocument.getPublicKey(resKid);
-		String hexPublicKey = publicKey.getPublicKeyHex();
 		ECDSAVerifier verifier;
 		try {
-			verifier = new ECDSAVerifier(ECKeyUtils.toECPublicKey(Numeric.hexStringToByteArray(hexPublicKey), "secp256k1"));
+			verifier = new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey());
 		} catch (JOSEException e1) {
-			throw new CommitObjectException("Invalid public key. "+hexPublicKey, e1);
+			throw new CommitObjectException("Invalid public key. "+publicKey.getPublicKeyHex(), e1);
 		}
 		try {
 			if (!commitObject.verify(verifier)) {
@@ -401,7 +403,7 @@ public class IdentityHub {
 		didDocument = DIDResolverAPI.getInstance().getDocument(encryptedJWT.getHeader().getKeyID().split("#")[0]);
 		publicKey = didDocument.getPublicKey(encryptedJWT.getHeader().getKeyID());
 		try {
-			if (!encryptedJWT.verify(new ECDSAVerifier(ECKeyUtils.toECPublicKey(Numeric.hexStringToByteArray(publicKey.getPublicKeyHex()), "secp256k1")))) {
+			if (!encryptedJWT.verify(new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey()))) {
 				throw new CommitObjectException("Verify failed payload in commit"); 
 			}
 		} catch (JOSEException e1) {
@@ -472,9 +474,8 @@ public class IdentityHub {
 		// Verify verifiable
 		didDocument = DIDResolverAPI.getInstance().getDocument(verifierKeyId.split("#")[0]);
 		publicKey = didDocument.getPublicKey(verifierKeyId);
-		hexPublicKey = publicKey.getPublicKeyHex();
 		try {
-			if (verifiableJwts.verify(new ECDSAVerifier(ECKeyUtils.toECPublicKey(Numeric.hexStringToByteArray(hexPublicKey), "secp256k1")))) {
+			if (verifiableJwts.verify(new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey()))) {
 				// protected + header
 				JWSHeader.Builder headerBuilder = new JWSHeader.Builder(commitObject.getHeader());
 				headerBuilder.customParams(new HashMap<>(commitObject.getHeader().getCustomParams()));
@@ -554,7 +555,7 @@ public class IdentityHub {
     		// encrypt secret key with public key of grantees
     		List<Auth.Key> grantee = new ArrayList<>();
     		for (PublicKey granteePublicKey : granteePublicKeys) {
-    			BCECPublicKey publicKey = ECKeyUtils.toECPublicKey(Numeric.hexStringToByteArray(granteePublicKey.getPublicKeyHex()), "secp256k1");
+    			BCECPublicKey publicKey = (BCECPublicKey)granteePublicKey.getPublicKey();
     			grantee.add(new Auth.Key(granteePublicKey.getId(), Base64URL.encode(ECIES.encrypt(publicKey, secretKey.getEncoded())).toString()));
     		}
     		auth.setGrantee(grantee);
