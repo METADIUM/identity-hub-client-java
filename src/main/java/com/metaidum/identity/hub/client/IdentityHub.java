@@ -341,7 +341,7 @@ public class IdentityHub {
     public CommitObject getVerifiableObject(String subjectOwnerDid, List<String> types, BCECPrivateKey privateKey) throws HubCommunicationException, IOException, CommitObjectException {
     	// object query
     	ObjectQueryResponse objectResponse = objectQuery(subjectOwnerDid, Interface.Collections, Verifiable.JSONLD_CONTEXT_CREDENTIALS, types, null);
-    	if (objectResponse == null || objectResponse.getObjects().size() == 0) {
+    	if (objectResponse == null || objectResponse.getObjects() == null || objectResponse.getObjects().size() == 0) {
     		return null;
     	}
     	
