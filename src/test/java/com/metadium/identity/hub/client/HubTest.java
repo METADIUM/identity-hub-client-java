@@ -1,14 +1,19 @@
 package com.metadium.identity.hub.client;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.net.URI;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.UUID;
 
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
@@ -21,7 +26,9 @@ import com.metadium.vc.VerifiableCredential;
 import com.metadium.vc.VerifiablePresentation;
 import com.metadium.vc.VerifiableSignedJWT;
 import com.metadium.vc.util.ECKeyUtils;
+import com.metaidum.did.resolver.client.DIDResolverAPI;
 import com.metaidum.identity.hub.client.IdentityHub;
+import com.metaidum.identity.hub.client.crypto.AES;
 import com.metaidum.identity.hub.client.request.BasicRequest;
 import com.metaidum.identity.hub.client.request.BasicRequest.Interface;
 import com.metaidum.identity.hub.client.request.object.CommitObject;
@@ -37,6 +44,7 @@ import com.nimbusds.jwt.SignedJWT;
 public class HubTest {
 	static {
 		IdentityHub.setDebug(true);
+		DIDResolverAPI.setDebug(true);
 	}
 	
 	private static final String did = "did:meta:testnet:000000000000000000000000000000000000000000000000000000000000054b";
@@ -60,6 +68,9 @@ public class HubTest {
 	public void setup() throws Exception {
 		System.setOut(System.out);
 		System.setErr(System.err);
+		
+		IdentityHub.setUrl("https://testnetih.metadium.com/");
+		DIDResolverAPI.getInstance().setResolverUrl("http://13.125.251.87:3006/1.0/");
 		
 		if (hubClient == null) {
 			hubClient = new IdentityHub(true, did, keyId, new ECDSASigner(privateKey));
@@ -201,5 +212,76 @@ public class HubTest {
 		// not allowed permission test
 		objectQueryResponse = spHubClient.objectQuery(did, Interface.Collections, new ArrayList<>(vp.getContexts()).get(0), new ArrayList<>(vp.getTypes()), null);
 		assertEquals("permissions_required", objectQueryResponse.getErrorCode());
+	}
+	
+	@Test
+	public void writePerformenceTest() throws Exception {
+		Calendar issued = Calendar.getInstance();
+		Calendar expire = Calendar.getInstance();
+		expire.setTime(issued.getTime());
+		expire.add(Calendar.DAY_OF_YEAR, 100);
+
+		// prepared vc list
+		List<SignedJWT> vcList = new ArrayList<>();
+		for (int i = 0; i < 5; i++) {
+			VerifiableCredential birthVc = new VerifiableCredential();
+			birthVc.setId(URI.create("http://aa.metadium.com/credential/343"));
+			birthVc.setIssuer(URI.create(did));
+			birthVc.addTypes(Collections.singletonList("Birth"+i+"Credential"));
+			birthVc.setIssuanceDate(issued.getTime());
+			birthVc.setExpirationDate(expire.getTime());
+			LinkedHashMap<String, String> subject = new LinkedHashMap<>();
+			subject.put("id", did);
+			subject.put("birth", "1977.02.06");
+			birthVc.setCredentialSubject(subject);
+			vcList.add(VerifiableSignedJWT.sign(birthVc, JWSAlgorithm.ES256K, keyId, UUID.randomUUID().toString(), new ECDSASigner(privateKey)));
+		}
+		
+		long time = System.currentTimeMillis();
+		for (SignedJWT vc : vcList) {
+			long writeTime = System.currentTimeMillis();
+			WriteObjectResponse writeResponse = hubClient.writeRequestForVerifiableObject(did, publicKey, vc, Operation.create, null, null /**Collections.singletonList(spDid)*/);
+			assertTrue(writeResponse.getErrorCode() == null);
+			System.out.println("Write VC time : "+(System.currentTimeMillis()-writeTime));
+		}
+		System.out.println("total write VC time = "+(System.currentTimeMillis()-time));
+		
+		// create vp
+		VerifiablePresentation vp = new VerifiablePresentation();
+		for (SignedJWT vc : vcList) {
+			vp.addVerifiableCredential(vc.serialize());
+		}
+		vp.setId(URI.create("http://aa.metadium.com/credential/343"));
+		vp.setHolder(URI.create(did));
+		vp.addTypes(Collections.singletonList("MyPresentation"));
+		SignedJWT signedVp = VerifiableSignedJWT.sign(vp, JWSAlgorithm.ES256K, keyId, UUID.randomUUID().toString(), new ECDSASigner(privateKey));
+		
+		// write vp
+		time = System.currentTimeMillis();
+		WriteObjectResponse writeResponse = hubClient.writeRequestForVerifiableObject(did, publicKey, signedVp, Operation.create, null, Collections.singletonList(spDid));
+		assertTrue(writeResponse.getErrorCode() == null);
+		System.out.println("Write VP time = "+(System.currentTimeMillis()-time));
+	}
+	
+	@Test
+	public void eciesTest() throws GeneralSecurityException {
+		
+		SecureRandom random = new SecureRandom();
+		byte[] key = new byte[32];
+		byte[] iv  = new byte[16];
+		
+		
+		for (int i = 0; i < 1000; i++) {
+			random.nextBytes(key);
+			random.nextBytes(iv);
+			
+			byte[] message = new byte[Math.abs(random.nextInt())%1000];
+			byte[] cipherText = AES.encrptyWithCbcPKCS7Padding(key, iv, message);
+			byte[] decryptedText = AES.decryptWithCbcPKCS7Padding(key, iv, cipherText);
+			
+			assertArrayEquals(message, decryptedText);
+		}
+		
+		
 	}
 }

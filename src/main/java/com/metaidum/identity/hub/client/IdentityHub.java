@@ -16,15 +16,11 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -32,6 +28,7 @@ import com.metadium.vc.Verifiable;
 import com.metaidum.did.resolver.client.DIDResolverAPI;
 import com.metaidum.did.resolver.client.document.DidDocument;
 import com.metaidum.did.resolver.client.document.PublicKey;
+import com.metaidum.identity.hub.client.crypto.AES;
 import com.metaidum.identity.hub.client.crypto.ECIES;
 import com.metaidum.identity.hub.client.exception.CommitObjectException;
 import com.metaidum.identity.hub.client.exception.HubCommunicationException;
@@ -88,12 +85,22 @@ public class IdentityHub {
 	
 	private static Logger logger = Logger.getLogger(IdentityHub.class.getName());
 	
+	private static String hubUrl = null;
+	
 	/**
 	 * Set debug
 	 * @param debug
 	 */
 	public static void setDebug(boolean debug) {
 		bDebug = debug;
+	}
+	
+	/**
+	 * Set hub url
+	 * @param url
+	 */
+	public static void setUrl(String url) {
+		hubUrl = url;
 	}
 	
 	/** OkHttpClient */
@@ -174,7 +181,7 @@ public class IdentityHub {
 		
 		Request request = new Request.Builder()
 				.addHeader("content-type", "application/jwt")
-				.url(bTestNet ? TESTNET_HUB_URL : MAINNET_HUB_URL)
+				.url(hubUrl != null ? hubUrl : (bTestNet ? TESTNET_HUB_URL : MAINNET_HUB_URL))
 				.post(RequestBody.create(null, requestBody))
 				.build();
 		
@@ -445,9 +452,8 @@ public class IdentityHub {
 		byte[] iv = new Base64URL(auth.getInitialVector()).decode();
 		byte[] decryptedPayload;
 		try {
-			Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding", new BouncyCastleProvider());
-			cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(secretKey, "AES"), new IvParameterSpec(iv));
-			decryptedPayload = cipher.doFinal(encryptedJWT.getPayload().toBytes());
+		
+			decryptedPayload = AES.decryptWithCbcPKCS7Padding(secretKey, iv, encryptedJWT.getPayload().toBytes());
 		}
 		catch (Exception e) {
 			throw new CommitObjectException("Error when decrypt encrypt verifiable", e);
@@ -544,12 +550,10 @@ public class IdentityHub {
     		SecretKey secretKey = keyGen.generateKey();
     		
     		// encrypt verifiable with AES
-    		Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding", new BouncyCastleProvider());
-    		cipher.init(Cipher.ENCRYPT_MODE, secretKey, new IvParameterSpec(iv));
-    		byte[] encryptedData = cipher.doFinal(verifiable.serialize().getBytes(Charset.forName("utf-8")));
+    		byte[] encryptedData = AES.encrptyWithCbcPKCS7Padding(secretKey.getEncoded(), iv, verifiable.serialize().getBytes(Charset.forName("utf-8")));
     		builder.setEncryptedData(Base64URL.encode(encryptedData));
     		
-    		// encrypt secret key with public key of self  
+    		// encrypt secret key with public key of self
     		auth.setOwner(new Auth.Key(clientKeyId, Base64URL.encode(ECIES.encrypt(publickey, secretKey.getEncoded())).toString()));
     		
     		// encrypt secret key with public key of grantees
@@ -613,7 +617,11 @@ public class IdentityHub {
      * @throws CommitObjectException 
      */
     public WriteObjectResponse writeRequestForVerifiableObject(String subjectOwnerDid, BCECPublicKey publickey, SignedJWT verifiable, Operation operation, String objectId,  List<String> granteeDids) throws HubCommunicationException, IOException, CommitObjectException {
+    	long time = System.currentTimeMillis();
     	EncryptedObjectPayload payload = encryptVerifiable(publickey, verifiable, granteeDids);
+    	if (bDebug) {
+    		logger.log(Level.INFO, "Encrypt commit verifiable "+(System.currentTimeMillis()-time)+"ms");
+    	}
     	try {
 			payload.sign(clientSigner);
 		}

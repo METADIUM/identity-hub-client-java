@@ -16,10 +16,6 @@ import java.security.spec.EllipticCurve;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-
 import org.bouncycastle.crypto.digests.SHA256Digest;
 import org.bouncycastle.crypto.digests.SHA512Digest;
 import org.bouncycastle.crypto.macs.HMac;
@@ -46,8 +42,10 @@ public class ECIES {
     static {
         params = ECNamedCurveTable.getParameterSpec("secp256k1");
         ellipticCurve = EC5Util.convertCurve(params.getCurve(), params.getSeed());
+        
+        
     }
-
+    
     /**
      * encrypt message with encoded ec public-key
      * @param publicKey ec public-key (encoded)
@@ -94,10 +92,8 @@ public class ECIES {
         byte[] iv = Arrays.copyOfRange(hMacSHA256(senderPrivateKey.getEncoded(), message), 0, 16);
 
         // encrypt
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS7Padding", new BouncyCastleProvider());
-        cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(aesKey, "AES"), new IvParameterSpec(iv));
-        byte[] encryptedData = cipher.doFinal(message);
-
+        byte[] encryptedData = AES.encrptyWithCbcPKCS7Padding(aesKey, iv, message);
+        
         // generate mac
         byte[] mac = hMacSHA256(macKey, Arrays.concatenate(iv, encryptedData));
 
@@ -167,9 +163,7 @@ public class ECIES {
             throw new InvalidKeyException("Invalid mac");
         }
 
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS7Padding", new BouncyCastleProvider());
-        cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(aesKey, "AES"), new IvParameterSpec(Arrays.copyOfRange(ivct, 0, 16)));
-        return cipher.doFinal(ivct, 16, ivct.length-16);
+        return AES.decryptWithCbcPKCS7Padding(aesKey, Arrays.copyOfRange(ivct, 0, 16), Arrays.copyOfRange(ivct, 16, ivct.length)); 
     }
 
     /**
