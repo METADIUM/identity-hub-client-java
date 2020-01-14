@@ -19,7 +19,7 @@ Add dependency
 <dependency>
     <groupId>com.github.METADIUM</groupId>
     <artifactId>identity-hub-client-java</artifactId>
-    <version>0.1.3</version>
+    <version>0.1.4</version>
 </dependency>
 ```
 ### Gradle
@@ -36,7 +36,7 @@ Add dependency
 
 ```gradle
 dependencies {
-    implementation 'com.github.METADIUM:identity-hub-client-java:0.1.3'
+    implementation 'com.github.METADIUM:identity-hub-client-java:0.1.4'
 }
 ```
 
@@ -63,15 +63,15 @@ String did = "{did of user}";
 
 // Get verifiable credential
 List<String> typesOfCrendential = Arrays.asList("VerifiableCredential", "NameCredential");
-CommitObject commitObject = hubClient.verifiableQuery(did, typesOfCrendential, privateKey);
-SignedJWT signedVc = commitObject.getPayload().toSignedJWT();
+List<CommitObject> commitObjects = hubClient.getDecryptedCommitsOfObjects(did, typesOfCrendential, privateKey);
+SignedJWT signedVc = commitObjects.get(0).getPayload().toSignedJWT();
 VerifiableCrendentail vc = (VerifiableCrendentail)VerifiableSignedJWT.toVerifiable(signedVc);
 
 
 // Get verifiable presentation
 List<String> typesOfPresentation = Arrays.asList("VerifiablePresentation", "ServicePresentation");
-CommitObject commitObject = hubClient.verifiableQuery(did, typesOfPresentation, privateKey);
-SignedJWT signedVp = commitObject.getPayload().toSignedJWT();
+List<CommitObject> commitObjects = hubClient.getDecryptedCommitsOfObjects(did, typesOfPresentation, privateKey);
+SignedJWT signedVp = commitObject.get(0).getPayload().toSignedJWT();
 VerifiablePresentation vp = (VerifiablePresentation)VerifiableSignedJWT.toVerifiable(signedVp);
 
 // Get verifiable credential of verifiable presentation
