@@ -14,7 +14,8 @@ public abstract class BasicRequest {
 		WriteRequest,
 		ObjectQueryRequest,
 		CommitQueryRequest,
-		DeleteRequest
+		DeleteRequest,
+		ObjectCommitQueryRequest
 	}
 	
 	public enum Interface {

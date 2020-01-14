@@ -2,6 +2,7 @@ package com.metaidum.identity.hub.client;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.interfaces.ECPublicKey;
@@ -36,6 +37,7 @@ import com.metaidum.identity.hub.client.request.BasicRequest;
 import com.metaidum.identity.hub.client.request.BasicRequest.Interface;
 import com.metaidum.identity.hub.client.request.CommitQueryRequest;
 import com.metaidum.identity.hub.client.request.DeleteRequest;
+import com.metaidum.identity.hub.client.request.ObjectCommitQueryRequest;
 import com.metaidum.identity.hub.client.request.ObjectQueryRequest;
 import com.metaidum.identity.hub.client.request.WriteRequest;
 import com.metaidum.identity.hub.client.request.object.Auth;
@@ -293,6 +295,26 @@ public class IdentityHub {
     }
     
     /**
+     * Request object commit query 
+     * @param inf             interface name to query
+     * @param context         to query
+     * @param types           of object. nullable
+     * @param objectIds       id list of objects to find. nullable
+     * @return object to find. If not found or error, return null
+     * @throws HubCommunicationException
+     * @throws IOException
+     */
+    public CommitQueryResponse objectCommitQuery(String subjectOwnerDid, Interface inf, String context, List<String> types, List<String> objectIds) throws HubCommunicationException, IOException {
+    	ObjectCommitQueryRequest req = new ObjectCommitQueryRequest();
+    	req.setIssuer(clientDid);
+    	req.setSubject(subjectOwnerDid);
+    	req.setAudience(hubDid);
+    	req.setQuery(inf, context, types, objectIds, null);
+
+    	return new Gson().fromJson(request(req), CommitQueryResponse.class) ;
+    }
+    
+    /**
      * Request write object
      * @param subjectOwnerDid did of owner of object
      * @param commit          to commit object
@@ -336,7 +358,7 @@ public class IdentityHub {
     }
     
     /**
-     * Request getting verifiable object
+     * Request to get recent commits of objects
      * @param subjectOwnerDid did of onwer of object
      * @param types           type of object
      * @param privateKey      to decrypt contents
@@ -345,24 +367,21 @@ public class IdentityHub {
      * @throws IOException network error
      * @throws CommitObjectException 
      */
-    public CommitObject getVerifiableObject(String subjectOwnerDid, List<String> types, BCECPrivateKey privateKey) throws HubCommunicationException, IOException, CommitObjectException {
-    	// object query
-    	ObjectQueryResponse objectResponse = objectQuery(subjectOwnerDid, Interface.Collections, Verifiable.JSONLD_CONTEXT_CREDENTIALS, types, null);
-    	if (objectResponse == null || objectResponse.getObjects() == null || objectResponse.getObjects().size() == 0) {
-    		return null;
+    public List<CommitObject> getDecryptedCommitsOfObjects(String subjectOwnerDid, List<String> types, BCECPrivateKey privateKey) throws HubCommunicationException, IOException, CommitObjectException {
+    	// request ObjectCommitQuery
+    	CommitQueryResponse commitResponse = objectCommitQuery(subjectOwnerDid, Interface.Collections, Verifiable.JSONLD_CONTEXT_CREDENTIALS, types, null);
+    	
+    	List<CommitObject> ret = new ArrayList<>();
+    	if (commitResponse != null) {
+    		for (CommitQueryResponse.Commit commit : commitResponse.getCommits()) {
+    			ret.add(decryptAndVerifyCommitQueryResponse(subjectOwnerDid, commit, privateKey));
+    		}
     	}
     	
-    	// object is only one
-    	String objectId = objectResponse.getObjects().get(0).getId();
-    	
-    	CommitQueryResponse commitResponse = commitQuery(subjectOwnerDid, objectId, null, null);
-    	if (commitResponse == null || commitResponse.getCommits().size() == 0) {
-    		return null;
-    	}
-    	
-    	// Get recent commit
-    	CommitQueryResponse.Commit commit = commitResponse.getCommits().get(0);
-    	
+    	return ret;
+    }
+    
+    private CommitObject decryptAndVerifyCommitQueryResponse(String subjectOwnerDid, CommitQueryResponse.Commit commit, BCECPrivateKey privateKey) throws CommitObjectException {
     	// Verify commit content
     	JWSObject commitObject;
 		try {
@@ -460,7 +479,7 @@ public class IdentityHub {
 		}
 		
 		// Convert to verifiable
-		String verifiableJsonString = new String(decryptedPayload, "utf-8");
+		String verifiableJsonString = new String(decryptedPayload, StandardCharsets.UTF_8);
 		SignedJWT verifiableJwts;
 		try {
 			verifiableJwts = SignedJWT.parse(verifiableJsonString);
@@ -609,7 +628,7 @@ public class IdentityHub {
      * @param publickey        key to encryt verifiable
      * @param verifiable       to write
      * @param operation        create or update. If is update, must provide objectId 
-     * @param objectId         to update
+     * @param objectId         if operation is update, replace, must not null
      * @param granteeDids      grantee did list
      * @return response
      * @throws HubCommunicationException 
@@ -641,7 +660,7 @@ public class IdentityHub {
     	    	.setKeyId(clientKeyId)
     	    	.setPayload(new Payload(payload.serialize()));
     	
-    	if (operation == Operation.update) {
+    	if (operation == Operation.update || operation == Operation.replace) {
     		if (objectId != null) {
     			builder.setObjectId(objectId);
     		}

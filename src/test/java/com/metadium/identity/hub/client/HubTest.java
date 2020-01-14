@@ -3,7 +3,6 @@ package com.metadium.identity.hub.client;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.net.URI;
@@ -150,21 +149,33 @@ public class HubTest {
 		assertEquals(1, objectQueryResponse.getObjects().size());
 		
 		// get verifiable test
-		CommitObject commitObject = hubClient.getVerifiableObject(did, new ArrayList<>(vp.getTypes()), privateKey);
-		assertNotNull(commitObject);
-		assertEquals(objectId, commitObject.getHeader().getCustomParam("object_id"));
+		List<CommitObject> commitObjects = hubClient.getDecryptedCommitsOfObjects(did, new ArrayList<>(vp.getTypes()), privateKey);
+		assertTrue(commitObjects.size() == 1);
+		assertEquals(objectId, commitObjects.get(0).getHeader().getCustomParam("object_id"));
 		
-		SignedJWT readSignedJWT = commitObject.getPayload().toSignedJWT();
+		SignedJWT readSignedJWT = commitObjects.get(0).getPayload().toSignedJWT();
 		assertEquals(signedVp.serialize(), readSignedJWT.serialize());
 		
+		// replace vp
+		signedVp = makeTestVP();
+		vp = (VerifiablePresentation)VerifiableSignedJWT.toVerifiable(signedVp);
+		writeResponse = hubClient.writeRequestForVerifiableObject(did, publicKey, signedVp, Operation.replace, objectId, null);
+		assertNotNull(writeResponse.getRevisions());
+		assertEquals(1, writeResponse.getRevisions().size());
+
+		// test to replaced vp
+		commitObjects = hubClient.getDecryptedCommitsOfObjects(did, new ArrayList<>(vp.getTypes()), privateKey);
+		assertTrue(commitObjects.size() == 1);
+		assertEquals(signedVp.serialize(), commitObjects.get(0).getPayload().toSignedJWT().serialize());
+
 		// remove vp
 		WriteObjectResponse removeResponse = hubClient.writeRequestForVerifiableDelete(did, new ArrayList<>(vp.getTypes()), objectId);
 		assertNotNull(removeResponse.getRevisions());
 		assertEquals(1, removeResponse.getRevisions().size());
 		
 		// empty verifiable test
-		commitObject = hubClient.getVerifiableObject(did, new ArrayList<>(vp.getTypes()), privateKey);
-		assertNull(commitObject);
+		commitObjects = hubClient.getDecryptedCommitsOfObjects(did, new ArrayList<>(vp.getTypes()), privateKey);
+		assertTrue(commitObjects.size() == 0);
 	}
 	
 	@Test
@@ -198,10 +209,10 @@ public class HubTest {
 		assertNotNull(objectQueryResponse.getObjects());
 		assertEquals(1, objectQueryResponse.getObjects().size());
 		
-		CommitObject commitObject = spHubClient.getVerifiableObject(did, new ArrayList<>(vp.getTypes()), spPrivateKey);
-		assertNotNull(commitObject);
+		List<CommitObject> commitObjects = spHubClient.getDecryptedCommitsOfObjects(did, new ArrayList<>(vp.getTypes()), spPrivateKey);
+		assertNotNull(commitObjects.size() > 0);
 		
-		SignedJWT readSignedJWT = commitObject.getPayload().toSignedJWT();
+		SignedJWT readSignedJWT = commitObjects.get(0).getPayload().toSignedJWT();
 		assertEquals(signedVp.serialize(), readSignedJWT.serialize());
 		
 		// remove permission

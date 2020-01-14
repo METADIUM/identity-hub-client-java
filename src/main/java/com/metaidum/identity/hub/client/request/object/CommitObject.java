@@ -41,7 +41,8 @@ public class CommitObject extends JWSObject {
 	public enum Operation {
 		create,
 		update,
-		delete
+		delete,
+		replace
 	}
 	
 	public CommitObject(JWSHeader header, Payload payload) {
