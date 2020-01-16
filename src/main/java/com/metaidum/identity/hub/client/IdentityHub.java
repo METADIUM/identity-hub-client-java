@@ -22,6 +22,7 @@ import javax.crypto.SecretKey;
 
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPrivateKey;
 import org.bouncycastle.jcajce.provider.asymmetric.ec.BCECPublicKey;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -236,7 +237,9 @@ public class IdentityHub {
     		
     		// verify response
     		try {
-        		if (jwsObject.verify(new ECDSAVerifier(ecPublicKey))) {
+    			ECDSAVerifier verifier = new ECDSAVerifier(ecPublicKey);
+    			verifier.getJCAContext().setProvider(new BouncyCastleProvider());
+        		if (jwsObject.verify(verifier)) {
         			return jwsObject.getPayload().toString();
         		}
         		else {
@@ -405,6 +408,7 @@ public class IdentityHub {
 		ECDSAVerifier verifier;
 		try {
 			verifier = new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey());
+			verifier.getJCAContext().setProvider(new BouncyCastleProvider());
 		} catch (JOSEException e1) {
 			throw new CommitObjectException("Invalid public key. "+publicKey.getPublicKeyHex(), e1);
 		}
@@ -429,7 +433,9 @@ public class IdentityHub {
 		didDocument = DIDResolverAPI.getInstance().getDocument(encryptedJWT.getHeader().getKeyID().split("#")[0]);
 		publicKey = didDocument.getPublicKey(encryptedJWT.getHeader().getKeyID());
 		try {
-			if (!encryptedJWT.verify(new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey()))) {
+			verifier = new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey());
+			verifier.getJCAContext().setProvider(new BouncyCastleProvider());
+			if (!encryptedJWT.verify(verifier)) {
 				throw new CommitObjectException("Verify failed payload in commit"); 
 			}
 		} catch (JOSEException e1) {
@@ -500,7 +506,9 @@ public class IdentityHub {
 		didDocument = DIDResolverAPI.getInstance().getDocument(verifierKeyId.split("#")[0]);
 		publicKey = didDocument.getPublicKey(verifierKeyId);
 		try {
-			if (verifiableJwts.verify(new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey()))) {
+			verifier = new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey());
+			verifier.getJCAContext().setProvider(new BouncyCastleProvider());
+			if (verifiableJwts.verify(verifier)) {
 				// protected + header
 				JWSHeader.Builder headerBuilder = new JWSHeader.Builder(commitObject.getHeader());
 				headerBuilder.customParams(new HashMap<>(commitObject.getHeader().getCustomParams()));
