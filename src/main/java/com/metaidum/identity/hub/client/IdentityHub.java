@@ -388,11 +388,7 @@ public class IdentityHub {
     	// Verify commit content
     	JWSObject commitObject;
 		try {
-			commitObject = new JWSObject(
-					new Base64URL(commit.getProtectedHeader()),
-					new Base64URL(commit.getPayload()),
-					new Base64URL(commit.getSignature())
-					);
+			commitObject = new JWSObject(new Base64URL(commit.getProtectedHeader()), new Base64URL(commit.getPayload()), new Base64URL(commit.getSignature()));
 		}
 		catch (ParseException e1) {
 			throw new CommitObjectException("Commit is not JWS", e1);
@@ -402,22 +398,10 @@ public class IdentityHub {
 			logger.log(Level.INFO, "Hub-Response CommitedObject\nHeader "+commitObject.getHeader().toString()+"\nPayload "+commitObject.getPayload().toString());
 		}
 		
+		// 요청자와 owner 가 같으면 검증 하지 않음
 		String resKid = commitObject.getHeader().getKeyID();
-		DidDocument didDocument = DIDResolverAPI.getInstance().getDocument(resKid.split("#")[0]);
-		PublicKey publicKey = didDocument.getPublicKey(resKid);
-		ECDSAVerifier verifier;
-		try {
-			verifier = new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey());
-			verifier.getJCAContext().setProvider(new BouncyCastleProvider());
-		} catch (JOSEException e1) {
-			throw new CommitObjectException("Invalid public key. "+publicKey.getPublicKeyHex(), e1);
-		}
-		try {
-			if (!commitObject.verify(verifier)) {
-				throw new CommitObjectException("Verify failed commit");
-			}
-		} catch (JOSEException e1) {
-			throw new CommitObjectException("Error when verifying commit", e1);
+		if (!clientDid.equals(subjectOwnerDid) || !resKid.equals(clientKeyId)) {
+			verifyJws(commitObject);
 		}
 		
 		// Verify encrypted content
@@ -430,16 +414,10 @@ public class IdentityHub {
 		if (bDebug) {
 			logger.log(Level.INFO, "Hub-Response EncryptVerifiable\nHeader "+encryptedJWT.getHeader().toString());
 		}
-		didDocument = DIDResolverAPI.getInstance().getDocument(encryptedJWT.getHeader().getKeyID().split("#")[0]);
-		publicKey = didDocument.getPublicKey(encryptedJWT.getHeader().getKeyID());
-		try {
-			verifier = new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey());
-			verifier.getJCAContext().setProvider(new BouncyCastleProvider());
-			if (!encryptedJWT.verify(verifier)) {
-				throw new CommitObjectException("Verify failed payload in commit"); 
-			}
-		} catch (JOSEException e1) {
-			throw new CommitObjectException("Error when verifying payload in commit", e1);
+		
+		resKid = encryptedJWT.getHeader().getKeyID();
+		if (!clientDid.equals(subjectOwnerDid) || !resKid.equals(clientKeyId)) {
+			verifyJws(encryptedJWT);
 		}
 		
 		// get encrypted secret key
@@ -503,27 +481,19 @@ public class IdentityHub {
 		}
 		
 		// Verify verifiable
-		didDocument = DIDResolverAPI.getInstance().getDocument(verifierKeyId.split("#")[0]);
-		publicKey = didDocument.getPublicKey(verifierKeyId);
-		try {
-			verifier = new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey());
-			verifier.getJCAContext().setProvider(new BouncyCastleProvider());
-			if (verifiableJwts.verify(verifier)) {
-				// protected + header
-				JWSHeader.Builder headerBuilder = new JWSHeader.Builder(commitObject.getHeader());
-				headerBuilder.customParams(new HashMap<>(commitObject.getHeader().getCustomParams()));
-				for (String key : commit.getHeader().keySet()) {
-					headerBuilder.customParam(key, commit.getHeader().get(key));
-				}
-				
-				return new CommitObject(headerBuilder.build(), new Payload(verifiableJsonString));
-			}
-			else {
-				throw new CommitObjectException("Verify failed verifiable"); 
-			}
-		} catch (JOSEException e) {
-			throw new CommitObjectException("Error when verifying verifiable", e);
+		if (!clientDid.equals(subjectOwnerDid)) {
+			verifyJws(verifiableJwts);
 		}
+		
+
+		// protected + header
+		JWSHeader.Builder headerBuilder = new JWSHeader.Builder(commitObject.getHeader());
+		headerBuilder.customParams(new HashMap<>(commitObject.getHeader().getCustomParams()));
+		for (String key : commit.getHeader().keySet()) {
+			headerBuilder.customParam(key, commit.getHeader().get(key));
+		}
+			
+		return new CommitObject(headerBuilder.build(), new Payload(verifiableJsonString));
     }
     
 
@@ -801,7 +771,29 @@ public class IdentityHub {
 
 
 
-    
+    private void verifyJws(JWSObject jwsObject) throws CommitObjectException {
+    	String did = (String)jwsObject.getHeader().getCustomParam("iss");
+		if (did == null) {
+			did = jwsObject.getHeader().getKeyID().split("#")[0];
+		}
+    	
+		DidDocument didDocument = DIDResolverAPI.getInstance().getDocument(did);
+		PublicKey publicKey = didDocument.getPublicKey(jwsObject.getHeader().getKeyID());
+		ECDSAVerifier verifier;
+		try {
+			verifier = new ECDSAVerifier((ECPublicKey)publicKey.getPublicKey());
+			verifier.getJCAContext().setProvider(new BouncyCastleProvider());
+		} catch (JOSEException e1) {
+			throw new CommitObjectException("Invalid public key. "+publicKey.getPublicKeyHex(), e1);
+		}
+		try {
+			if (!jwsObject.verify(verifier)) {
+				throw new CommitObjectException("Verify failed");
+			}
+		} catch (JOSEException e1) {
+			throw new CommitObjectException("Error when verifying", e1);
+		}
+    }
 
 
 }

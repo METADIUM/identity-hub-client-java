@@ -9,6 +9,7 @@ import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -25,7 +26,6 @@ import com.metadium.vc.VerifiableCredential;
 import com.metadium.vc.VerifiablePresentation;
 import com.metadium.vc.VerifiableSignedJWT;
 import com.metadium.vc.util.ECKeyUtils;
-import com.metaidum.did.resolver.client.DIDResolverAPI;
 import com.metaidum.identity.hub.client.IdentityHub;
 import com.metaidum.identity.hub.client.crypto.AES;
 import com.metaidum.identity.hub.client.request.BasicRequest;
@@ -43,13 +43,12 @@ import com.nimbusds.jwt.SignedJWT;
 public class HubTest {
 	static {
 		IdentityHub.setDebug(true);
-		DIDResolverAPI.setDebug(true);
 	}
 	
-	private static final String did = "did:meta:testnet:000000000000000000000000000000000000000000000000000000000000054b";
-	private static final String keyId = "did:meta:testnet:000000000000000000000000000000000000000000000000000000000000054b#MetaManagementKey#cfd31afff25b2260ea15ef59f2d5d7dfe8c13511";
-	private static final String privateKeyHex = "86975dca6a36062768cf4b648b5b3f712caa2d1d61fa42520624a8e574788822";
-	private static final String publicKeyHex = "d3e33a1791e77362130f9c11352933ea035e6fa3079610aa60ba800c9b963e132ed8db542d305027c4f1738efbed15bc63dc9f619c74c8e68287576769f5da3e";
+	private static final String did = "did:meta:testnet:000000000000000000000000000000000000000000000000000000000000087a";
+	private static final String keyId = "did:meta:testnet:000000000000000000000000000000000000000000000000000000000000087a#MetaManagementKey#d364fbce2b48d1b61b70d55464a00692c16c1953";
+	private static final String privateKeyHex = "cbf5bda2fc9e22472e7ae6159d9045269a8c07ac103dbbb10f2c3a230f68841f";
+	private static final String publicKeyHex = "e6e8bab06a42e37badab2226a5d899cf936694a8a3dbe4d9a3cd13c260f4979edf2737dc453f987f66800c79365982ee80ac0c255781e37b1e77f6522b62dfdf";
 	private static final BCECPrivateKey privateKey = ECKeyUtils.toECPrivateKey(Numeric.toBigInt(privateKeyHex), "secp256k1");
 	private static final BCECPublicKey publicKey = ECKeyUtils.toECPublicKey(Numeric.toBigInt(publicKeyHex), "secp256k1");
 	private IdentityHub hubClient;
@@ -68,8 +67,8 @@ public class HubTest {
 		System.setOut(System.out);
 		System.setErr(System.err);
 		
-		IdentityHub.setUrl("https://testnetih.metadium.com/");
-		DIDResolverAPI.getInstance().setResolverUrl("http://13.125.251.87:3006/1.0/");
+//		IdentityHub.setUrl("https://testnetih.metadium.com/");
+//		DIDResolverAPI.getInstance().setResolverUrl("http://13.125.251.87:3006/1.0/");
 		
 		if (hubClient == null) {
 			hubClient = new IdentityHub(true, did, keyId, new ECDSASigner(privateKey));
@@ -138,7 +137,7 @@ public class HubTest {
 		VerifiablePresentation vp = (VerifiablePresentation)VerifiableSignedJWT.toVerifiable(signedVp);
 		
 		// write vp
-		WriteObjectResponse writeResponse = hubClient.writeRequestForVerifiableObject(did, publicKey, signedVp, Operation.create, null, null);
+		WriteObjectResponse writeResponse = hubClient.writeRequestForVerifiableObject(did, publicKey, signedVp, Operation.create, null, Collections.singletonList(spDid));
 		assertNotNull(writeResponse.getRevisions());
 		assertEquals(1, writeResponse.getRevisions().size());
 		
@@ -155,6 +154,24 @@ public class HubTest {
 		
 		SignedJWT readSignedJWT = commitObjects.get(0).getPayload().toSignedJWT();
 		assertEquals(signedVp.serialize(), readSignedJWT.serialize());
+		
+		// add permission for sp
+		PermissionGrantPayload permissionPayload = new PermissionGrantPayload();
+		permissionPayload.setContext(BasicRequest.context);
+		permissionPayload.setAllow("-R--");
+		permissionPayload.setOwner(did);
+		permissionPayload.setGrantee(spDid);
+		permissionPayload.setType( new ArrayList<>(vp.getTypes()));
+		WriteObjectResponse writePermissionResponse = hubClient.writeRequestForPermission(did, writeResponse.getRevisions().get(0), Operation.create, permissionPayload);
+		assertNotNull(writePermissionResponse.getRevisions());
+		assertEquals(1, writePermissionResponse.getRevisions().size());
+
+		commitObjects = spHubClient.getDecryptedCommitsOfObjects(did, new ArrayList<>(vp.getTypes()), spPrivateKey);
+		assertTrue(commitObjects.size() == 1);
+		assertEquals(objectId, commitObjects.get(0).getHeader().getCustomParam("object_id"));
+		readSignedJWT = commitObjects.get(0).getPayload().toSignedJWT();
+		assertEquals(signedVp.serialize(), readSignedJWT.serialize());
+		
 		
 		// replace vp
 		signedVp = makeTestVP();
@@ -292,7 +309,10 @@ public class HubTest {
 			
 			assertArrayEquals(message, decryptedText);
 		}
-		
-		
+	}
+	
+	@Test
+	public void getVPTest() throws Exception {
+		List<CommitObject> vpList = hubClient.getDecryptedCommitsOfObjects(did, Arrays.asList(VerifiablePresentation.JSONLD_TYPE_PRESENTATION, "AA", "coinplug", "email"), privateKey);
 	}
 }
