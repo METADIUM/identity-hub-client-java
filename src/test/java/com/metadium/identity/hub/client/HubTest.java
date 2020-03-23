@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
+import java.security.interfaces.ECPublicKey;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -60,7 +61,12 @@ public class HubTest {
 	private static final BCECPrivateKey spPrivateKey = ECKeyUtils.toECPrivateKey(Numeric.toBigInt(spPrivateKeyHex), "secp256k1");
 	private IdentityHub spHubClient;
 	
+	private static final String identityHubPublicKeyId = "did:meta:testnet:0000000000000000000000000000000000000000000000000000000000000004#MetaManagementKey#961c20596e7ec441723fbb168461f4b51371d8aa";
+	private static final ECPublicKey identityHubPublicKey = ECKeyUtils.toECPublicKey(Numeric.hexStringToByteArray("0468677ff9dcf2fcb23c3e8633b651fefe9d0da82c99f738642f0967abc6dd653710d8750b522c738ffde22983ab384017783b95bd7512e1b929843db3d28a8b2d"), "secp256k1");
 	
+	static {
+		IdentityHub.setPublicKeyOfIdentityHub(identityHubPublicKeyId, identityHubPublicKey);
+	}
 	
 	@Before
 	public void setup() throws Exception {

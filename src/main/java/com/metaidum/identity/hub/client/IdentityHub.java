@@ -109,6 +109,12 @@ public class IdentityHub {
 	/** OkHttpClient */
 	private static OkHttpClient okHttpClient;
 	
+	/** ID of public key of identity hub **/
+	private static String hubPublicKeyId;
+	
+	/** Public key of Identity hub */
+	private static ECPublicKey hubPublicKey;
+	
 	/** is test net */
 	private boolean bTestNet;
 
@@ -128,6 +134,18 @@ public class IdentityHub {
         OkHttpClient.Builder httpClient = new OkHttpClient.Builder();
         return httpClient.build();
         
+    }
+    
+    /**
+     * Set public key of Identity hub
+     * <p/>
+     * 
+     * @param keyID
+     * @param ecPublicKey
+     */
+    public static void setPublicKeyOfIdentityHub(String keyID, ECPublicKey ecPublicKey) {
+    	hubPublicKeyId = keyID;
+    	hubPublicKey = ecPublicKey;
     }
     
     /**
@@ -213,26 +231,30 @@ public class IdentityHub {
     		
     		// Get document of did 
     		String resKid = jwsObject.getHeader().getKeyID();
-    		String resDid = resKid.split("#")[0];
-    		DidDocument didDocument = DIDResolverAPI.getInstance().getDocument(resDid);
-    		if (didDocument == null) {
-    			// error
-    			throw new HubCommunicationException("Not register hub DID. "+resDid);
-    		}
     		
-    		// Get public key
-    		PublicKey publicKeyObj = didDocument.getPublicKey(resKid);
-    		if (publicKeyObj == null) {
-    			throw new HubCommunicationException("Not exists key id in did document "+resKid);
+    		// Check if already setting public key id is same as public key of response
+    		ECPublicKey ecPublicKey;
+    		if (hubPublicKeyId != null && resKid.equals(hubPublicKeyId)) {
+    			ecPublicKey = hubPublicKey;
     		}
-    		
-    		ECPublicKey ecPublicKey = (ECPublicKey)publicKeyObj.getPublicKey();
-    		if (ecPublicKey == null) {
-    			throw new HubCommunicationException("Not exists or invalid public key hex in did document "+resKid);
-    		}
-    		String hexPublicKey = publicKeyObj.getPublicKeyHex();
-    		if (hexPublicKey == null) {
-    			
+    		else {
+	    		String resDid = resKid.split("#")[0];
+	    		DidDocument didDocument = DIDResolverAPI.getInstance().getDocument(resDid);
+	    		if (didDocument == null) {
+	    			// error
+	    			throw new HubCommunicationException("Not register hub DID. "+resDid);
+	    		}
+	    		
+	    		// Get public key
+	    		PublicKey publicKeyObj = didDocument.getPublicKey(resKid);
+	    		if (publicKeyObj == null) {
+	    			throw new HubCommunicationException("Not exists key id in did document "+resKid);
+	    		}
+	    		
+	    		ecPublicKey = (ECPublicKey)publicKeyObj.getPublicKey();
+	    		if (ecPublicKey == null) {
+	    			throw new HubCommunicationException("Not exists or invalid public key hex in did document "+resKid);
+	    		}
     		}
     		
     		// verify response
