@@ -19,7 +19,7 @@ Add dependency
 <dependency>
     <groupId>com.github.METADIUM</groupId>
     <artifactId>identity-hub-client-java</artifactId>
-    <version>0.1.8</version>
+    <version>0.1.9</version>
 </dependency>
 ```
 ### Gradle
@@ -36,7 +36,7 @@ Add dependency
 
 ```gradle
 dependencies {
-    implementation 'com.github.METADIUM:identity-hub-client-java:0.1.8'
+    implementation 'com.github.METADIUM:identity-hub-client-java:0.1.9'
 }
 ```
 
