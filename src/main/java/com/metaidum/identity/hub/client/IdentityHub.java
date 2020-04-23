@@ -78,7 +78,7 @@ public class IdentityHub {
 	private static final String TESTNET_HUB_URL = "https://testnetdatahub.metadium.com/";
 	
 	// default hub did
-	private static final String MAINNET_HUB_DID_DEFAULT = "did:meta:testnet:0000000000000000000000000000000000000000000000000000000000000527";
+	private static final String MAINNET_HUB_DID_DEFAULT = "did:meta:0000000000000000000000000000000000000000000000000000000000000527";
 	private static final String TESTNET_HUB_DID_DEFAULT = "did:meta:testnet:0000000000000000000000000000000000000000000000000000000000000004";
 	
 	/** Debug log */
